@@ -1,5 +1,5 @@
-from . import images
+from . import quadstar_data
 
 
 def main() -> None:
-    images.main()
+    quadstar_data.quadstar_main()

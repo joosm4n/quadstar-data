@@ -14,15 +14,9 @@ import typing
 from pathlib import Path
 import re
 
-import sqlalchemy
-from sqlalchemy.exc import IntegrityError
-
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session
-
 # local modules
 from . import images_sql as orm
-from . import tiff_analyse as tiff
+from . import image_analyse as tiff
 
 
 ImageSet = typing.NewType("ImageSet", None)
@@ -312,31 +306,9 @@ def analyse_image_set(folder_path: Path) -> ImageSet:
     )
 
 
-@dataclass
-class DataBase:
-    name: str
-    engine: sqlalchemy.Engine
-
-    def add_img_set(self, img_set: ImageSet):
-        orm_img_set = img_set.to_orm()
-        with Session(self.engine) as session:
-            session.add(orm_img_set)
-            try:
-                session.commit()
-            except IntegrityError:
-                session.rollback()
-                print(
-                    f"[Warning] Unable to add ImageSet '{img_set.name}' as is already in database!"
-                )
-
-
-def open_database(db_filename: str) -> DataBase:
-    engine = create_engine(db_filename)
-    orm.Base.metadata.create_all(engine)
-    return DataBase(name=db_filename, engine=engine)
-
-
 def main():
+    from .quadstar_data import DataBase, open_database
+
     p: Path = Path("20260824_185310_e-5.0_g-1.0_n-5.done")
     # p: Path = Path("20260805_221654_e-0.5_g-1.0_n-5")
     image_set: ImageSet = analyse_image_set(p)
