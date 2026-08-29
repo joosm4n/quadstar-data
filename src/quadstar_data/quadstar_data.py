@@ -20,17 +20,21 @@ class DataBase:
     name: str
     engine: sqlalchemy.Engine
 
-    def add_img_set(self, img_set: img.ImageSet):
-        orm_img_set = img_set.to_orm()
-        with Session(self.engine) as session:
-            session.add(orm_img_set)
-            try:
-                session.commit()
-            except IntegrityError:
-                session.rollback()
-                print(
-                    f"[Warning] Unable to add ImageSet '{img_set.name}' as is already in database!"
-                )
+    def add_img_set(self, img_set: img.ImageSet | list[img.ImageSet]):
+        if isinstance(img_set, img.ImageSet):
+            img_set = [img_set]
+
+        for iset in img_set:
+            orm_img_set: orm.ImageSet = iset.to_orm()
+            with Session(self.engine) as session:
+                session.add(orm_img_set)
+                try:
+                    session.commit()
+                except IntegrityError:
+                    session.rollback()
+                    print(
+                        f"[Warning] Unable to add ImageSet '{iset.name}' as is already in database!"
+                    )
 
     def add_imu_data(self, imu_data: orm.IMUData | list[orm.IMUData]):
         if isinstance(imu_data, orm.IMUData):
@@ -39,13 +43,12 @@ class DataBase:
         with Session(self.engine) as session:
             for d in imu_data:
                 session.add(d)
-                try:
-                    session.commit()
-                except IntegrityError:
-                    session.rollback()
-                    print(
-                        f"[Warning] Unable to add IMUData '{d.timestamp}' as is already in database!"
-                    )
+
+            try:
+                session.commit()
+            except IntegrityError:
+                session.rollback()
+                print("[Warning] Unable to add IMUData as is already in database!")
 
 
 def open_database(db_filename: str) -> DataBase:
