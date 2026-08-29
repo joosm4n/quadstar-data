@@ -1,3 +1,5 @@
+from re import sub
+
 import sqlalchemy
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import create_engine
@@ -36,23 +38,34 @@ def open_database(db_filename: str) -> DataBase:
     return DataBase(name=db_filename, engine=engine)
 
 
-def quadstar_data(path: str, db_name: str, leave_unzipped: bool, is_directory: bool):
+def quadstar_data(
+    path: str, db_name: str, leave_unzipped: bool, is_directory: bool, raw_dir: bool
+):
     p: Path = Path(path)
     db: DataBase = open_database(db_name)
     image_set: img.ImageSet
+    unzipped: Path
 
     if is_directory:
         for subdir in p.iterdir():
-            unzipped: Path = zipping.extract_tar_zst(subdir)
+            if not raw_dir:
+                unzipped = zipping.extract_tar_zst(subdir)
+            else:
+                unzipped = subdir
+
             image_set = img.analyse_image_set(unzipped)
-            if not leave_unzipped:
+            if not leave_unzipped and not raw_dir:
                 zipping.delete_unzipped_folder(unzipped, True)
             db.add_img_set(image_set)
 
     else:
-        unzipped: Path = zipping.extract_tar_zst(p)
+        if not raw_dir:
+            unzipped = zipping.extract_tar_zst(p)
+        else:
+            unzipped = p
+
         image_set = img.analyse_image_set(unzipped)
-        if not leave_unzipped:
+        if not leave_unzipped and not raw_dir:
             zipping.delete_unzipped_folder(unzipped, True)
         db.add_img_set(image_set)
 
@@ -75,6 +88,12 @@ def quadstar_main():
         "--leave-unzipped",
         action="store_true",
         help="Leaves the unzipped folder you are reading data from",
+    )
+    parser.add_argument(
+        "-r",
+        "--raw-dir",
+        action="store_true",
+        help="The given files are unzipped directories so no unzipping is required",
     )
 
     DEFAULT_DB_NAME: str = "sqlite:///observations.db"
@@ -101,4 +120,5 @@ def quadstar_main():
         db_name=args.sqlite,
         leave_unzipped=args.leave_unzipped,
         is_directory=is_dir,
+        raw_dir=bool(args.raw_dir),
     )
