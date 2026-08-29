@@ -62,23 +62,22 @@ def quadstar_data(
     image_set: img.ImageSet
     unzipped: Path
 
+    dirs: list[Path]
     if is_directory:
-        for subdir in p.iterdir():
-            if not raw_dir:
-                unzipped = zipping.extract_tar_zst(subdir)
-            else:
-                unzipped = subdir
-
-            image_set = img.analyse_image_set(unzipped)
-            if not leave_unzipped and not raw_dir:
-                zipping.delete_unzipped_folder(unzipped, True)
-            db.add_img_set(image_set)
-
-    else:
-        if not raw_dir:
-            unzipped = zipping.extract_tar_zst(p)
+        if raw_dir:
+            dirs = [subdir for subdir in p.iterdir() if subdir.is_dir()]
         else:
-            unzipped = p
+            dirs = [
+                subdir for subdir in p.iterdir() if subdir.name.endswith(".tar.zst")
+            ]
+    else:
+        dirs = [p]
+
+    for subdir in dirs:
+        if not raw_dir:
+            unzipped = zipping.extract_tar_zst(subdir)
+        else:
+            unzipped = subdir
 
         image_set = img.analyse_image_set(unzipped)
         if not leave_unzipped and not raw_dir:
@@ -90,8 +89,15 @@ def quadstar_imu(csv_path: str, db_name: str):
     path: Path = Path(csv_path)
     db: DataBase = open_database(db_name)
 
-    imu_data: list[orm.IMUData] = imu.read_imu_csv(path)
-    db.add_imu_data(imu_data)
+    files: list[Path]
+    if path.is_dir():
+        files = [f for f in path.iterdir() if f.suffix == ".csv"]
+    else:
+        files = [path]
+
+    for file in files:
+        imu_data: list[orm.IMUData] = imu.read_imu_csv(file)
+        db.add_imu_data(imu_data)
 
 
 def quadstar_main():
@@ -108,7 +114,7 @@ def quadstar_main():
     group.add_argument(
         "-i",
         "--imu",
-        help="Read the .csv that has imu data in it",
+        help="A .csv file or folder with .csv files that has imu data in it",
     )
     parser.add_argument(
         "-l",
