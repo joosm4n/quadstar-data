@@ -1,5 +1,4 @@
 import datetime as dt
-from enum import unique
 from pathlib import Path
 
 from sqlalchemy import ForeignKey, JSON
@@ -96,3 +95,24 @@ class ImageSet(Base):
     @property
     def path_obj(self) -> Path:
         return Path(self.path)
+
+
+class IMUData(Base):
+    __tablename__ = "imu_data"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    timestamp: Mapped[float]
+    acel_x: Mapped[float]
+    acel_y: Mapped[float]
+    acel_z: Mapped[float]
+    gyro_x: Mapped[float]
+    gyro_y: Mapped[float]
+    gyro_z: Mapped[float]
+
+    @property
+    def acel(self) -> tuple[float, float, float]:
+        return (self.acel_x, self.acel_y, self.acel_z)
+
+    @property
+    def gyro(self) -> tuple[float, float, float]:
+        return (self.gyro_x, self.gyro_y, self.gyro_z)

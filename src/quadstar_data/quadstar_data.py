@@ -12,6 +12,7 @@ from pathlib import Path
 from . import images as img
 from . import zipping
 from . import images_sql as orm
+from . import imu_data as imu
 
 
 @dataclass
@@ -30,6 +31,21 @@ class DataBase:
                 print(
                     f"[Warning] Unable to add ImageSet '{img_set.name}' as is already in database!"
                 )
+
+    def add_imu_data(self, imu_data: orm.IMUData | list[orm.IMUData]):
+        if isinstance(imu_data, orm.IMUData):
+            imu_data = [imu_data]
+
+        with Session(self.engine) as session:
+            for d in imu_data:
+                session.add(d)
+                try:
+                    session.commit()
+                except IntegrityError:
+                    session.rollback()
+                    print(
+                        f"[Warning] Unable to add IMUData '{d.timestamp}' as is already in database!"
+                    )
 
 
 def open_database(db_filename: str) -> DataBase:
@@ -70,11 +86,17 @@ def quadstar_data(
         db.add_img_set(image_set)
 
 
+def quadstar_imu(csv_path: str, db_name: str):
+    path: Path = Path(csv_path)
+    db: DataBase = open_database(db_name)
+
+    imu_data: list[orm.IMUData] = imu.read_imu_csv(path)
+    db.add_imu_data(imu_data)
+
+
 def quadstar_main():
-    parser = argparse.ArgumentParser(
-        prog="QuadStar Data Analysis",
-    )
-    group = parser.add_mutually_exclusive_group()
+    parser = argparse.ArgumentParser(prog="uv run quadstar-data", suggest_on_error=True)
+    group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument(
         "-f", "--filename", help="The .tar.zst file you want to unzip and get data from"
     )
@@ -82,6 +104,11 @@ def quadstar_main():
         "-d",
         "--directory",
         help="It is a folder that all your .tar.zst files are in, to get data from",
+    )
+    group.add_argument(
+        "-i",
+        "--imu",
+        help="Read the .csv that has imu data in it",
     )
     parser.add_argument(
         "-l",
@@ -104,6 +131,13 @@ def quadstar_main():
         default=DEFAULT_DB_NAME,
     )
     args: argparse.Namespace = parser.parse_args()
+
+    if args.imu:
+        quadstar_imu(
+            csv_path=args.imu,
+            db_name=args.sqlite,
+        )
+        return
 
     is_dir: bool = False
     data_path: str | None = None
