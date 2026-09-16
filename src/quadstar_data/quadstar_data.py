@@ -2,12 +2,13 @@ from re import sub
 
 import sqlalchemy
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, exists
 from sqlalchemy.orm import Session
 
 from dataclasses import dataclass
 import argparse
 from pathlib import Path
+from tqdm import tqdm
 
 from . import images as img
 from . import zipping
@@ -32,7 +33,7 @@ class DataBase:
                     session.commit()
                 except IntegrityError:
                     session.rollback()
-                    print(
+                    tqdm.write(
                         f"[Warning] Unable to add ImageSet '{iset.name}' as is already in database!"
                     )
 
@@ -48,7 +49,14 @@ class DataBase:
                 session.commit()
             except IntegrityError:
                 session.rollback()
-                print("[Warning] Unable to add IMUData as is already in database!")
+                tqdm.write("[Warning] Unable to add IMUData as is already in database!")
+
+    def img_set_exists(self, set_name: str) -> bool:
+        with Session(self.engine) as session:
+            return (
+                session.query(orm.ImageSet.id).filter_by(name=set_name).first()
+                is not None
+            )
 
 
 def open_database(db_filename: str) -> DataBase:
@@ -76,16 +84,32 @@ def quadstar_data(
     else:
         dirs = [p]
 
-    for subdir in dirs:
-        if not raw_dir:
-            unzipped = zipping.extract_tar_zst(subdir)
-        else:
-            unzipped = subdir
+    for subdir in tqdm(dirs):
+        unzipped = None
+        try:
+            if not raw_dir:
+                unzipped = zipping.extract_tar_zst(subdir)
+            else:
+                unzipped = subdir
 
-        image_set = img.analyse_image_set(unzipped)
-        if not leave_unzipped and not raw_dir:
-            zipping.delete_unzipped_folder(unzipped, True)
-        db.add_img_set(image_set)
+            set_name: str = unzipped.name
+            if set_name.endswith((".done", ".solve", ".taking")):
+                set_name = unzipped.stem
+
+            if db.img_set_exists(set_name):
+                tqdm.write(
+                    f"[Info] Not adding ImageSet '{set_name}' as is already in database!"
+                )
+            else:
+                image_set = img.analyse_image_set(unzipped)
+                db.add_img_set(image_set)
+
+        except Exception as e:
+            tqdm.write(f"Failed to process {subdir}, due to: {e}")
+
+        finally:
+            if not leave_unzipped and not raw_dir and unzipped is not None:
+                zipping.delete_unzipped_folder(unzipped, True)
 
 
 def quadstar_imu(csv_path: str, db_name: str):
@@ -98,9 +122,12 @@ def quadstar_imu(csv_path: str, db_name: str):
     else:
         files = [path]
 
-    for file in files:
-        imu_data: list[orm.IMUData] = imu.read_imu_csv(file)
-        db.add_imu_data(imu_data)
+    for file in tqdm(files):
+        try:
+            imu_data: list[orm.IMUData] = imu.read_imu_csv(file)
+            db.add_imu_data(imu_data)
+        except Exception as e:
+            tqdm.write(f"Failed to process imu data at {file}, due to: {e}")
 
 
 def quadstar_main():
